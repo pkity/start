@@ -6,3 +6,4 @@ git checkout master
 chown -R ecs-user:ecs-user $1
 cd $1/
 chmod +x *.sh
+./send_ip_tip.sh
