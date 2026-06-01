@@ -3,19 +3,11 @@ import json
 import os
 import time
 import urllib.request
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 from playwright.sync_api import sync_playwright
-import time
 
 COOKIE_PATH = "qyweixin_cookie.json"
 
 def get_public_ip():
-    """Get the public IP of current device"""
     ip_services = [
         "https://ip.sb",
         "https://ifconfig.me/ip",
@@ -36,27 +28,21 @@ def get_public_ip():
     print("❌ All IP services failed")
     return None
 
-def save_cookies(driver):
-    """Save cookies to file"""
-    cookies = driver.get_cookies()
+def save_cookies(context):
+    cookies = context.cookies()
     with open(COOKIE_PATH, "w", encoding="utf-8") as f:
         json.dump(cookies, f)
     print("✅ Cookies saved")
 
-def load_cookies(driver):
-    """Load cookies from file"""
+def load_cookies(context, page):
     if not os.path.exists(COOKIE_PATH):
         return False
     try:
-        driver.get("https://work.weixin.qq.com/")
+        page.goto("https://work.weixin.qq.com/")
         time.sleep(1)
         with open(COOKIE_PATH, encoding="utf-8") as f:
             cookies = json.load(f)
-        driver.delete_all_cookies()
-        for cookie in cookies:
-            if 'sameSite' in cookie and cookie['sameSite'] not in ['Strict', 'Lax', 'None']:
-                cookie['sameSite'] = 'Lax'
-            driver.add_cookie(cookie)
+        context.add_cookies(cookies)
         print("✅ Cookies loaded successfully!")
         return True
     except Exception as e:
@@ -74,80 +60,102 @@ def update_qyweixin_app_trust_ip():
             ]
         )
         context = browser.new_context(viewport={"width": 1920, "height": 1080})
-        driver = context.new_page()
-        wait = WebDriverWait(driver, 60)
+        page = context.new_page()
         try:
-            cookie_loaded = load_cookies(driver)
+            cookie_loaded = load_cookies(context, page)
             if cookie_loaded:
-                driver.get("https://work.weixin.qq.com/wework_admin/frame")
+                page.goto("https://work.weixin.qq.com/wework_admin/frame")
                 time.sleep(1)
-                if "login" not in driver.current_url:
+                if "login" not in page.url:
                     print("✅ Cookies loaded, entered WeChat Work admin panel")
                 else:
                     print("🔑 Cookies expired, please scan QR code to login...")
-                    wait.until(EC.url_contains("wework_admin/frame"))
-                    save_cookies(driver)
+                    page.wait_for_url("**/wework_admin/frame**", timeout=60000)
+                    save_cookies(context)
             else:
-                driver.get("https://work.weixin.qq.com/wework_admin/frame")
+                page.goto("https://work.weixin.qq.com/wework_admin/frame")
                 print("🔑 Please scan QR code to login...")
-                wait.until(EC.url_contains("wework_admin/frame"))
-                save_cookies(driver)
+                page.wait_for_url("**/wework_admin/frame**", timeout=60000)
+                save_cookies(context)
             print("Entering app trusted IP settings...")
-            driver.get("https://work.weixin.qq.com/wework_admin/frame#/apps/modApiApp/5629501431766533")
+            page.goto("https://work.weixin.qq.com/wework_admin/frame#/apps/modApiApp/5629501431766533")
             print("✅ Located trusted IP configuration page, waiting for page load...")
-            time.sleep(1)  # Wait for page to fully load
+            time.sleep(3)
+            page.screenshot(path="/home/alex/share/start/qywei/debug_page.png")
+            print("📸 Screenshot saved to debug_page.png")
 
             try:
                 print("Searching for Company's Trusted IP settings link...")
-                # Try multiple selectors
-                cards = driver.find_elements(By.CLASS_NAME, "app_card")
-                if not cards:
-                    print("Trying alternative selectors...")
-                    cards = driver.find_elements(By.CSS_SELECTOR, "[class*='card']")
-                if not cards:
-                    cards = driver.find_elements(By.CSS_SELECTOR, "[class*='Card']")
-                target_card = None
-                for card in cards:
-                    try:
-                        title_elem = card.find_element(By.CLASS_NAME, "app_card_head_title")
-                        if "Company's Trusted IP" in title_elem.text or "Trusted IP" in title_elem.text:
-                            target_card = card
-                            print("✅ Found Company's Trusted IP card")
-                            break
-                    except Exception as e:
-                        continue
-                if not target_card:
-                    print("❌ Company's Trusted IP card not found")
+                page.wait_for_selector("[class*='card']", timeout=10000)
+                
+                page.screenshot(path="/home/alex/share/start/qywei/debug_before_click.png")
+                print("📸 Screenshot before click saved to debug_before_click.png")
+                
+                cards_with_ip = page.locator("[class*='card']:has-text('可信IP'), [class*='card']:has-text('Trusted IP')").all()
+                print("Found {} card(s) with IP text".format(len(cards_with_ip)))
+                
+                if len(cards_with_ip) == 0:
+                    print("❌ No card found with Trusted IP text")
                     return
-                setting_link = target_card.find_element(By.CLASS_NAME, "apiApp_mod_card_operationLink")
+                
+                target_card = cards_with_ip[0]
+                print("✅ Found Trusted IP card")
+                setting_link = target_card.locator("[class*='apiApp_mod_card_operationLink']").first
                 print("✅ Found settings link")
                 print("Clicking settings link...")
-                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", setting_link)
-                driver.execute_script("arguments[0].click();", setting_link)
+                setting_link.scroll_into_view_if_needed()
+                setting_link.click()
                 print("✅ Clicked settings link, waiting for content to load...")
+                page.wait_for_load_state("networkidle", timeout=10000)
                 public_ip = get_public_ip()
                 if not public_ip:
                     print("❌ Unable to get public IP")
                     return
-                ip_textarea = wait.until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, 'textarea[placeholder*="Trusted IP"]'))
-                )
-                ip_textarea.clear()
-                ip_textarea.send_keys(public_ip)
-                submit_button = wait.until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, '[d_ck="submit"]'))
-                )
-                submit_button.click()
-                print("✅ Trusted IP updated successfully!")
+                
+                print("Waiting for IP input field...")
+                time.sleep(2)
+                page.screenshot(path="/home/alex/share/start/qywei/debug_after_click.png")
+                print("📸 Screenshot saved to debug_after_click.png")
+                print("Current URL: {}".format(page.url))
+                
+                input_elements = page.locator('input, textarea').all()
+                print("Found {} input/textarea elements".format(len(input_elements)))
+                for i, elem in enumerate(input_elements):
+                    try:
+                        tag = elem.evaluate("el => el.tagName")
+                        elem_type = elem.evaluate("el => el.type || ''")
+                        placeholder = elem.evaluate("el => el.placeholder || ''")
+                        name = elem.evaluate("el => el.name || ''")
+                        print("  Element {}: tag={}, type={}, placeholder={}, name={}".format(i, tag, elem_type, placeholder, name))
+                    except:
+                        pass
+                
+                try:
+                    ip_input = page.locator('textarea, input[type="text"]').first
+                    ip_input.wait_for(timeout=10000)
+                    print("✅ Found input field")
+                    ip_input.fill(public_ip)
+                    print("✅ Filled IP: {}".format(public_ip))
+                except Exception as e:
+                    print("❌ Failed to find textarea: {}".format(e))
+                    return
+                
+                submit_button = page.locator('[d_ck="submit"]').first
+                if submit_button.count() > 0:
+                    submit_button.click()
+                    print("✅ Trusted IP updated successfully!")
+                else:
+                    print("❌ Submit button not found")
+                    page.screenshot(path="debug_no_submit.png")
             except Exception as e:
                 print("❌ Operation failed: {}".format(e))
-                print("Current page URL: {}".format(driver.current_url))
-                print("Page title: {}".format(driver.title))
+                print("Current page URL: {}".format(page.url))
+                print("Page title: {}".format(page.title()))
         except Exception as e:
             print("❌ Error occurred: {}".format(e))
         finally:
             time.sleep(1)
-            driver.quit()
+            browser.close()
 
 if __name__ == "__main__":
     update_qyweixin_app_trust_ip()
