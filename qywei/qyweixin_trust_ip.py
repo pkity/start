@@ -81,29 +81,43 @@ def update_qyweixin_app_trust_ip():
             page.goto("https://work.weixin.qq.com/wework_admin/frame#/apps/modApiApp/5629501431766533")
             print("✅ Located trusted IP configuration page, waiting for page load...")
             time.sleep(3)
-            page.screenshot(path="/home/alex/share/start/qywei/debug_page.png")
+            page.screenshot(path="/tmp/debug_page.png")
             print("📸 Screenshot saved to debug_page.png")
 
             try:
                 print("Searching for Company's Trusted IP settings link...")
                 page.wait_for_selector("[class*='card']", timeout=10000)
-                
-                page.screenshot(path="/home/alex/share/start/qywei/debug_before_click.png")
+
+                page.screenshot(path="/tmp/debug_before_click.png")
                 print("📸 Screenshot before click saved to debug_before_click.png")
-                
-                cards_with_ip = page.locator("[class*='card']:has-text('可信IP'), [class*='card']:has-text('Trusted IP')").all()
-                print("Found {} card(s) with IP text".format(len(cards_with_ip)))
-                
-                if len(cards_with_ip) == 0:
+
+                cards = page.locator("[class*='card']").all()
+                print("Found {} card(s) total".format(len(cards)))
+
+                target_card = None
+                for idx, card in enumerate(cards):
+                    try:
+                        card_text = card.inner_text()
+                        print("Card {}: {}".format(idx, card_text[:100]))
+                        if '企业可信IP' in card_text or '企业IP' in card_text or ('可信IP' in card_text and '设置' in card_text):
+                            target_card = card
+                            print("✅ Found Trusted IP card at index {}".format(idx))
+                            break
+                    except Exception as e:
+                        print("Error reading card {}: {}".format(idx, e))
+                        continue
+
+                if not target_card:
                     print("❌ No card found with Trusted IP text")
                     return
-                
-                target_card = cards_with_ip[0]
-                print("✅ Found Trusted IP card")
-                setting_link = target_card.locator("[class*='apiApp_mod_card_operationLink']").first
+
+                setting_link = target_card.locator("a:has-text('设置'), button:has-text('设置'), [class*='setting']").first
+                if setting_link.count() == 0:
+                    setting_link = target_card.locator("[class*='operationLink'], a, button").first
                 print("✅ Found settings link")
                 print("Clicking settings link...")
                 setting_link.scroll_into_view_if_needed()
+                time.sleep(0.5)
                 setting_link.click()
                 print("✅ Clicked settings link, waiting for content to load...")
                 page.wait_for_load_state("networkidle", timeout=10000)
@@ -111,13 +125,13 @@ def update_qyweixin_app_trust_ip():
                 if not public_ip:
                     print("❌ Unable to get public IP")
                     return
-                
+
                 print("Waiting for IP input field...")
                 time.sleep(2)
-                page.screenshot(path="/home/alex/share/start/qywei/debug_after_click.png")
+                page.screenshot(path="/tmp/debug_after_click.png")
                 print("📸 Screenshot saved to debug_after_click.png")
                 print("Current URL: {}".format(page.url))
-                
+
                 input_elements = page.locator('input, textarea').all()
                 print("Found {} input/textarea elements".format(len(input_elements)))
                 for i, elem in enumerate(input_elements):
@@ -129,7 +143,7 @@ def update_qyweixin_app_trust_ip():
                         print("  Element {}: tag={}, type={}, placeholder={}, name={}".format(i, tag, elem_type, placeholder, name))
                     except:
                         pass
-                
+
                 try:
                     ip_input = page.locator('textarea, input[type="text"]').first
                     ip_input.wait_for(timeout=10000)
@@ -139,14 +153,14 @@ def update_qyweixin_app_trust_ip():
                 except Exception as e:
                     print("❌ Failed to find textarea: {}".format(e))
                     return
-                
+
                 submit_button = page.locator('[d_ck="submit"]').first
                 if submit_button.count() > 0:
                     submit_button.click()
                     print("✅ Trusted IP updated successfully!")
                 else:
                     print("❌ Submit button not found")
-                    page.screenshot(path="debug_no_submit.png")
+                    page.screenshot(path="/tmp/debug_no_submit.png")
             except Exception as e:
                 print("❌ Operation failed: {}".format(e))
                 print("Current page URL: {}".format(page.url))
