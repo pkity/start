@@ -85,81 +85,72 @@ def update_qyweixin_app_trust_ip():
             print("📸 Screenshot saved to debug_page.png")
 
             try:
-                print("Searching for Company's Trusted IP settings link...")
-                page.wait_for_selector("[class*='card']", timeout=10000)
+                print("Searching for the enterprise Trusted IP app card...")
+                page.wait_for_selector("li.app_card .app_card_head_title", timeout=10000)
 
                 page.screenshot(path="/tmp/debug_before_click.png")
                 print("📸 Screenshot before click saved to debug_before_click.png")
 
-                cards = page.locator("[class*='card']").all()
-                print("Found {} card(s) total".format(len(cards)))
-
-                target_card = None
-                for idx, card in enumerate(cards):
-                    try:
-                        card_text = card.inner_text()
-                        print("Card {}: {}".format(idx, card_text[:100]))
-                        if '企业可信IP' in card_text or '企业IP' in card_text or ('可信IP' in card_text and '设置' in card_text):
-                            target_card = card
-                            print("✅ Found Trusted IP card at index {}".format(idx))
-                            break
-                    except Exception as e:
-                        print("Error reading card {}: {}".format(idx, e))
-                        continue
-
-                if not target_card:
-                    print("❌ No card found with Trusted IP text")
+                target_heading = page.locator("li.app_card .app_card_head_title:has-text('企业可信IP')").first
+                if target_heading.count() == 0:
+                    print("❌ No enterprise Trusted IP app card found")
                     return
 
-                setting_link = target_card.locator("a:has-text('设置'), button:has-text('设置'), [class*='setting']").first
+                target_card = target_heading.locator('xpath=ancestor::li[contains(@class, "app_card")]').first
+                setting_link = target_card.locator("a:has-text('配置'), button:has-text('配置'), a, button").first
                 if setting_link.count() == 0:
-                    setting_link = target_card.locator("[class*='operationLink'], a, button").first
-                print("✅ Found settings link")
-                print("Clicking settings link...")
+                    print("❌ No configuration link/button found in enterprise Trusted IP card")
+                    return
+
+                print("✅ Found enterprise Trusted IP card and action link")
+                print("Clicking configuration link...")
                 setting_link.scroll_into_view_if_needed()
                 time.sleep(0.5)
-                setting_link.click()
-                print("✅ Clicked settings link, waiting for content to load...")
-                page.wait_for_load_state("networkidle", timeout=10000)
+                try:
+                    setting_link.click(timeout=10000)
+                except Exception as e:
+                    print("⚠️ Direct click failed, trying JS click: {}".format(e))
+                    handle = setting_link.element_handle()
+                    if handle:
+                        page.evaluate("el => el.click()", handle)
+                    else:
+                        raise
+
+                print("✅ Clicked configuration link, waiting for Trusted IP dialog...")
+                try:
+                    page.wait_for_selector('.app_ipConfig_dialog, .js_ipConfig_textarea', timeout=15000)
+                except Exception as e:
+                    print("⚠️ Trusted IP dialog did not appear immediately: {}".format(e))
+                    page.wait_for_timeout(3000)
+
                 public_ip = get_public_ip()
                 if not public_ip:
                     print("❌ Unable to get public IP")
                     return
 
-                print("Waiting for IP input field...")
+                print("Waiting for Trusted IP textarea...")
                 time.sleep(2)
                 page.screenshot(path="/tmp/debug_after_click.png")
                 print("📸 Screenshot saved to debug_after_click.png")
                 print("Current URL: {}".format(page.url))
 
-                input_elements = page.locator('input, textarea').all()
-                print("Found {} input/textarea elements".format(len(input_elements)))
-                for i, elem in enumerate(input_elements):
-                    try:
-                        tag = elem.evaluate("el => el.tagName")
-                        elem_type = elem.evaluate("el => el.type || ''")
-                        placeholder = elem.evaluate("el => el.placeholder || ''")
-                        name = elem.evaluate("el => el.name || ''")
-                        print("  Element {}: tag={}, type={}, placeholder={}, name={}".format(i, tag, elem_type, placeholder, name))
-                    except:
-                        pass
-
+                ip_input = page.locator('.js_ipConfig_textarea').first
                 try:
-                    ip_input = page.locator('textarea, input[type="text"]').first
                     ip_input.wait_for(timeout=10000)
-                    print("✅ Found input field")
+                    print("✅ Found Trusted IP textarea")
                     ip_input.fill(public_ip)
                     print("✅ Filled IP: {}".format(public_ip))
                 except Exception as e:
-                    print("❌ Failed to find textarea: {}".format(e))
+                    print("❌ Failed to find Trusted IP textarea: {}".format(e))
+                    page.screenshot(path="/tmp/debug_no_ip_input.png")
                     return
 
-                submit_button = page.locator('[d_ck="submit"]').first
+                submit_button = page.locator('.js_ipConfig_confirmBtn').first
                 if submit_button.count() > 0:
                     submit_button.click()
                     print("✅ Trusted IP updated successfully!")
                 else:
-                    print("❌ Submit button not found")
+                    print("❌ Confirm button not found in Trusted IP dialog")
                     page.screenshot(path="/tmp/debug_no_submit.png")
             except Exception as e:
                 print("❌ Operation failed: {}".format(e))
