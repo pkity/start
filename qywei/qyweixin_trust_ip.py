@@ -5,7 +5,7 @@ import time
 import urllib.request
 from playwright.sync_api import sync_playwright
 
-COOKIE_PATH = "qyweixin_cookie.json"
+COOKIE_PATH = "/mnt/quark/qyweixin/qyweixin_cookie.json"
 
 def get_public_ip():
     ip_services = [
