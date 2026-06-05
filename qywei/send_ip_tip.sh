@@ -12,11 +12,10 @@
 # echo "===== 执行完成，返回码：$? ====="
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo "===== Installing Python dependencies ====="
 python3 -m pip install --upgrade pip
-python3 -m pip install -r "$ROOT_DIR/requirements.txt"
+python3 -m pip install -r "$SCRIPT_DIR/requirements.txt"
 playwright install-deps
 python3 -m playwright install chromium
 
