@@ -13,6 +13,8 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+ls -la /mnt/quark
+
 echo "===== Installing Python dependencies ====="
 python3 -m pip install --upgrade pip
 python3 -m pip install -r "$SCRIPT_DIR/requirements.txt"
